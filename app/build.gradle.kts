@@ -41,12 +41,13 @@ android {
 
 dependencies {
 
+    implementation("androidx.activity:activity-compose:1.7.2")
+    implementation("androidx.compose.ui:ui-graphics:1.6.0") // For rendering the QR code as an ImageBitmap    implementation(libs.androidx.ui)
+    implementation("com.google.zxing:core:3.5.2")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation("androidx.activity:activity-compose:1.7.2")
     implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
