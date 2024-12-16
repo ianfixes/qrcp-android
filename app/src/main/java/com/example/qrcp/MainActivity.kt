@@ -109,6 +109,11 @@ class MainActivity : ComponentActivity() {
 
         connectivityManager.registerDefaultNetworkCallback(networkCallback)
 
+        val intent = intent
+        if (intent?.action == Intent.ACTION_SEND) {
+            handleSharedContent(intent)
+        }
+
         setContent {
             QRCPTheme {
                 MainScreen(
@@ -126,6 +131,17 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         connectivityManager.unregisterNetworkCallback(networkCallback)
+    }
+
+
+    private fun handleSharedContent(intent: Intent) {
+        val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        if (uri != null) {
+            Log.d("MainActivity", "Received shared file: $uri")
+            startHttpServer(uri)
+        } else {
+            Log.e("MainActivity", "No file found in shared intent.")
+        }
     }
 
     private fun checkWifiConnection(): Boolean {
