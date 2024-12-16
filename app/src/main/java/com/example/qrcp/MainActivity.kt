@@ -14,10 +14,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.qrcp.ui.theme.QRCPTheme
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 
 class MainActivity : ComponentActivity() {
     private var httpServer: SimpleHttpServer? = null
+    private var sharedUrl by mutableStateOf<String?>(null) // Track the shared URL
+    private var serverRunning by mutableStateOf(false) // Track server state
+    private val logMessages = mutableStateListOf<String>() // Debug log messages
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,13 +30,15 @@ class MainActivity : ComponentActivity() {
             QRCPTheme {
                 MainScreen(
                     onPickFile = { openFilePicker() },
-                    onStopServer = { stopHttpServer() }
+                    onStopServer = { stopHttpServer() },
+                    sharedUrl = sharedUrl,
+                    serverRunning = serverRunning,
+                    logMessages = logMessages
                 )
             }
         }
     }
 
-    // File picker launcher
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             startHttpServer(uri)
@@ -39,40 +46,69 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openFilePicker() {
-        filePickerLauncher.launch(arrayOf("*/*")) // Allow all file types
+        filePickerLauncher.launch(arrayOf("*/*"))
     }
 
     private fun startHttpServer(fileUri: Uri) {
-        stopHttpServer() // Stop any existing server
+        try {
+            stopHttpServer() // Stop any existing server
 
+            httpServer = SimpleHttpServer(
+                context = this,
+                fileUri = fileUri,
+                maxDownloads = 1,
+                onServerStopped = {
+                    logMessages.add("Server stopped.")
+                    serverRunning = false
+                    sharedUrl = null
+                }
+            )
+            httpServer?.start()
 
-        httpServer = SimpleHttpServer(
-            context = this,
-            fileUri = fileUri,
-            maxDownloads = 1, // Serve the file once for now
-            onServerStopped = { httpServer = null }
-        )
-        httpServer?.start()
-        val port = httpServer?.getServerPort() ?: -1
-        Log.d("MainActivity", "Server started on port: $port")
+            // Construct the shared URL
+            val ipAddress = getLocalIpAddress() ?: "127.0.0.1"
+            val port = httpServer?.getServerPort() ?: -1
+            sharedUrl = "http://$ipAddress:$port"
+            serverRunning = true
 
+            logMessages.add("Server started: $sharedUrl")
+        } catch (e: Exception) {
+            logMessages.add("Failed to start server: ${e.message}")
+        }
     }
 
     private fun stopHttpServer() {
         httpServer?.stop()
         httpServer = null
+        serverRunning = false
+        sharedUrl = null
+        logMessages.add("Server stopped.")
+    }
+
+    private fun getLocalIpAddress(): String? {
+        // Example implementation to get local IP address
+        val interfaces = NetworkInterface.getNetworkInterfaces()
+        for (intf in interfaces) {
+            val addresses = intf.inetAddresses
+            for (addr in addresses) {
+                if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                    return addr.hostAddress
+                }
+            }
+        }
+        return null
     }
 }
+
 
 @Composable
 fun MainScreen(
     onPickFile: () -> Unit,
-    onStopServer: () -> Unit
+    onStopServer: () -> Unit,
+    sharedUrl: String?,
+    serverRunning: Boolean,
+    logMessages: List<String>
 ) {
-    var logMessages by remember { mutableStateOf(listOf<String>()) }
-    var serverRunning by remember { mutableStateOf(false) }
-    var serverPort by remember { mutableStateOf(-1) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -82,13 +118,8 @@ fun MainScreen(
         Button(
             onClick = {
                 if (serverRunning) {
-                    logMessages = logMessages + "Stopping server..."
                     onStopServer()
-                    serverRunning = false
-                    serverPort = -1
-                    logMessages = logMessages + "Server stopped."
                 } else {
-                    logMessages = logMessages + "Opening file picker..."
                     onPickFile()
                 }
             },
@@ -99,10 +130,10 @@ fun MainScreen(
             Text(if (serverRunning) "Stop Sharing" else "Select File to Share")
         }
 
-        // Show server status
-        if (serverRunning) {
+        // Show the shared URL if the server is running
+        if (serverRunning && sharedUrl != null) {
             Text(
-                text = "Server is running on port: $serverPort",
+                text = "Shared URL: $sharedUrl",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
