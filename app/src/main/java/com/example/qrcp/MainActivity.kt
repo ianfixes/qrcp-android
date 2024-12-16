@@ -4,6 +4,7 @@ package com.example.qrcp
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.ImageBitmap
@@ -151,16 +152,25 @@ fun MainScreen(
 
 @Composable
 fun QRCodeDisplay(url: String) {
-    val qrCodeBitmap = remember(url) {
-        generateQRCode(url)
+    // Get screen dimensions
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val screenHeight = configuration.screenHeightDp.dp
+
+    // Determine the smaller dimension (width or height)
+    val qrCodeSize = if (screenWidth < screenHeight) screenWidth else screenHeight
+
+    // Generate the QR code
+    val qrCodeBitmap: ImageBitmap? = remember(url) {
+        generateQRCode(url, qrCodeSize.value.toInt())
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        qrCodeBitmap?.let {
+        qrCodeBitmap?.let { bitmap ->
             Image(
-                bitmap = it,
+                bitmap = bitmap,
                 contentDescription = "QR Code",
-                modifier = Modifier.size(200.dp)
+                modifier = Modifier.size(qrCodeSize)
             )
         }
         Text(
@@ -171,9 +181,8 @@ fun QRCodeDisplay(url: String) {
     }
 }
 
-fun generateQRCode(url: String): ImageBitmap? {
+fun generateQRCode(url: String, size: Int): ImageBitmap? {
     return try {
-        val size = 256 // Pixels
         val bits = QRCodeWriter().encode(url, BarcodeFormat.QR_CODE, size, size)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         for (x in 0 until size) {
