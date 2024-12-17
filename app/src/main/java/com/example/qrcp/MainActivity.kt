@@ -84,25 +84,28 @@ class MainActivity : ComponentActivity() {
         // Initialize ConnectivityManager
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        // Check the initial Wi-Fi state
+        // Initial check for Wi-Fi and hotspot
         isWifiConnected = checkWifiConnection()
 
-        // Register a NetworkCallback to monitor network changes
+        // Register NetworkCallback to monitor network changes
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onCapabilitiesChanged(network: android.net.Network, capabilities: NetworkCapabilities) {
                 val wifiConnected = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                 if (wifiConnected != isWifiConnected) {
-                    isWifiConnected = wifiConnected
-                    if (!wifiConnected && serverRunning) {
+                    isWifiConnected = wifiConnected || isWifiApEnabled()
+                    if (!isWifiConnected && serverRunning) {
                         stopHttpServer()
+                        Log.d("MainActivity", "Wi-Fi disabled and no hotspot. Server stopped.")
                     }
                 }
             }
 
             override fun onLost(network: android.net.Network) {
-                if (isWifiConnected && serverRunning) {
-                    isWifiConnected = false
+                // Recheck connection status when network is lost
+                isWifiConnected = checkWifiConnection()
+                if (!isWifiConnected && serverRunning) {
                     stopHttpServer()
+                    Log.d("MainActivity", "Network lost. Server stopped.")
                 }
             }
         }
@@ -120,6 +123,7 @@ class MainActivity : ComponentActivity() {
                     onPickFile = { openFilePicker() },
                     onStopServer = { stopHttpServer() },
                     openWifiSettings = { openWifiSettings() },
+                    openHotspotSettings = { openHotspotSettings() },
                     isWifiConnected = isWifiConnected,
                     sharedUrl = sharedUrl,
                     serverRunning = serverRunning
@@ -128,11 +132,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Check Wi-Fi and hotspot state when returning to the app
+        isWifiConnected = checkWifiConnection()
+        Log.d("MainActivity", "onResume: isWifiConnected = $isWifiConnected")
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         connectivityManager.unregisterNetworkCallback(networkCallback)
     }
-
 
     private fun handleSharedContent(intent: Intent) {
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
@@ -149,9 +159,11 @@ class MainActivity : ComponentActivity() {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             val method = wifiManager.javaClass.getDeclaredMethod("isWifiApEnabled")
             method.isAccessible = true
-            method.invoke(wifiManager) as Boolean
+            val hotspotEnabled = method.invoke(wifiManager) as Boolean
+            Log.d("MainActivity", "Hotspot enabled: $hotspotEnabled")
+            hotspotEnabled
         } catch (e: Exception) {
-            Log.e("MainActivity", "Failed to check Wi-Fi AP state", e)
+            Log.e("MainActivity", "Failed to check hotspot state", e)
             false
         }
     }
@@ -161,17 +173,9 @@ class MainActivity : ComponentActivity() {
         val network = connectivityManager.activeNetwork
         val capabilities = connectivityManager.getNetworkCapabilities(network)
 
-        // Check if connected to Wi-Fi as a client
-        if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
-            return true
-        }
-
-        // Check for hotspot mode
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        return isWifiApEnabled()
+        // Return true if connected to Wi-Fi or acting as a hotspot
+        return capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true || isWifiApEnabled()
     }
-
-
 
     private fun openWifiSettings() {
         val intent = Intent(Settings.ACTION_WIFI_SETTINGS)
@@ -194,28 +198,38 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Wi-Fi Hotspot Mode: Retrieve the DHCP server address
         if (isWifiApEnabled()) {
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val dhcpInfo = wifiManager.dhcpInfo
-            val hotspotIp = intToIpAddress(dhcpInfo.serverAddress)
-            Log.d("MainActivity", "Hotspot IP: $hotspotIp")
-            return hotspotIp
+            try {
+                // Wi-Fi Hotspot Mode: Look for interfaces matching 'ap<number>'
+                val interfaces = NetworkInterface.getNetworkInterfaces()
+                val apInterfacePattern = Regex("^ap\\d+$") // Matches 'ap' followed by digits
+
+                for (networkInterface in interfaces) {
+                    if (networkInterface.name.matches(apInterfacePattern)) {
+                        val addresses = networkInterface.inetAddresses
+                        for (address in addresses) {
+                            if (address is Inet4Address && !address.isLoopbackAddress) {
+                                Log.d("MainActivity", "Hotspot Interface: ${networkInterface.name}, IP: ${address.hostAddress}")
+                                return address.hostAddress
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error retrieving IP address", e)
+            }
         }
 
         return null
     }
 
-    @SuppressLint("DefaultLocale")
-    private fun intToIpAddress(ip: Int): String {
-        return String.format(
-            "%d.%d.%d.%d",
-            ip and 0xFF,
-            ip shr 8 and 0xFF,
-            ip shr 16 and 0xFF,
-            ip shr 24 and 0xFF
-        )
+    private fun openHotspotSettings() {
+        val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+        startActivity(intent)
     }
+
+
+
     private fun startHttpServer(fileUri: Uri) {
         try {
             stopHttpServer() // Stop any existing server
@@ -250,6 +264,7 @@ fun MainScreen(
     onPickFile: () -> Unit,
     onStopServer: () -> Unit,
     openWifiSettings: () -> Unit,
+    openHotspotSettings: () -> Unit,
     isWifiConnected: Boolean,
     sharedUrl: String?,
     serverRunning: Boolean
@@ -261,6 +276,7 @@ fun MainScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
         // Placeholder for instructional text
         if (isWifiConnected) {
             val intro = "QRCP shares files locally (via WiFi) to phones that can scan a QR code. Tap 'Select File' to begin."
@@ -271,35 +287,44 @@ fun MainScreen(
             )
         } else {
             Text(
-                text = "QRCP can only share over Wi-Fi",
+                text = "QRCP can only share over Wi-Fi or Hotspot",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
-
-        // Share/Stop Button or Open Wi-Fi Settings
-        Button(
-            onClick = {
-                if (isWifiConnected) {
+        if (isWifiConnected) {
+            // Share/Stop Button
+            Button(
+                onClick = {
                     if (serverRunning) onStopServer() else onPickFile()
-                } else {
-                    openWifiSettings()
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                if (isWifiConnected) {
-                    if (serverRunning) "Stop Sharing" else "Select File to Share"
-                } else {
-                    "Open Wi-Fi Settings"
-                }
-            )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (serverRunning) "Stop Sharing" else "Select File to Share")
+            }
+        } else {
+            // Wi-Fi Settings Button
+            Button(
+                onClick = { openWifiSettings() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Wi-Fi Settings")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Hotspot Settings Button
+            Button(
+                onClick = { openHotspotSettings() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Hotspot Settings")
+            }
         }
 
         // QR Code and URL Display
-        if (isWifiConnected && serverRunning && sharedUrl != null) {
+        if (serverRunning && sharedUrl != null) {
             Spacer(modifier = Modifier.height(16.dp))
             QRCodeDisplay(url = sharedUrl)
         }
