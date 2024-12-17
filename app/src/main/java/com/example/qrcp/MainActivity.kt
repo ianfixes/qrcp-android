@@ -144,10 +144,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun isWifiApEnabled(): Boolean {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val method = wifiManager.javaClass.getDeclaredMethod("isWifiApEnabled")
+            method.isAccessible = true
+            method.invoke(wifiManager) as Boolean
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to check Wi-Fi AP state", e)
+            false
+        }
+    }
+
     private fun checkWifiConnection(): Boolean {
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+
+        // Check if connected to Wi-Fi as a client
+        if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
+            return true
+        }
+
+        // Check for hotspot mode
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        return isWifiApEnabled()
     }
 
 
@@ -159,23 +180,42 @@ class MainActivity : ComponentActivity() {
 
     private fun getWifiIpAddress(): String? {
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = connectivityManager.activeNetwork ?: return null
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return null
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
 
-        // Check if the active network is Wi-Fi
-        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            // Get the Wi-Fi network's link properties
+        // Standard Wi-Fi Client Mode
+        if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
             val linkProperties = connectivityManager.getLinkProperties(network) ?: return null
             for (linkAddress in linkProperties.linkAddresses) {
                 val address = linkAddress.address
                 if (address is Inet4Address && !address.isLoopbackAddress) {
-                    return address.hostAddress // Return IPv4 address
+                    return address.hostAddress
                 }
             }
         }
+
+        // Wi-Fi Hotspot Mode: Retrieve the DHCP server address
+        if (isWifiApEnabled()) {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val dhcpInfo = wifiManager.dhcpInfo
+            val hotspotIp = intToIpAddress(dhcpInfo.serverAddress)
+            Log.d("MainActivity", "Hotspot IP: $hotspotIp")
+            return hotspotIp
+        }
+
         return null
     }
 
+    @SuppressLint("DefaultLocale")
+    private fun intToIpAddress(ip: Int): String {
+        return String.format(
+            "%d.%d.%d.%d",
+            ip and 0xFF,
+            ip shr 8 and 0xFF,
+            ip shr 16 and 0xFF,
+            ip shr 24 and 0xFF
+        )
+    }
     private fun startHttpServer(fileUri: Uri) {
         try {
             stopHttpServer() // Stop any existing server
