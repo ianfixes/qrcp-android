@@ -223,8 +223,9 @@ fun MainScreen(
     ) {
         // Placeholder for instructional text
         if (isWifiConnected) {
+            val intro = "QRCP shares files locally (via WiFi) to phones that can scan a QR code. Tap 'Select File' to begin."
             Text(
-                text = "QRCP shares files locally (via WiFi) to phones that can scan a QR code. Tap 'Select File' to begin.",
+                text = if (serverRunning) "Sharing will stop automatically after one download of this URL" else intro,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
