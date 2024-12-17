@@ -43,6 +43,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 
 import android.provider.Settings
+import android.widget.Toast
 
 
 import androidx.compose.ui.Modifier
@@ -146,14 +147,52 @@ class MainActivity : ComponentActivity() {
 
     private fun handleSharedContent(intent: Intent) {
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+
         if (uri != null) {
-            Log.d("MainActivity", "Received shared file: $uri")
-            startHttpServer(uri)
+            if (canAccessFile(uri)) {
+                Log.d("MainActivity", "Received shared file: $uri")
+                startHttpServer(uri)
+            } else {
+                showFileAccessError(uri)
+            }
         } else {
             Log.e("MainActivity", "No file found in shared intent.")
+            showGenericError()
         }
     }
 
+    private fun canAccessFile(uri: Uri): Boolean {
+        return try {
+            contentResolver.openInputStream(uri)?.use {
+                // If we can open and immediately close an input stream, we have access.
+                return true
+            }
+            false
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Cannot access file: $uri", e)
+            false
+        }
+    }
+
+    private fun showFileAccessError(uri: Uri) {
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "The app that shared file didn't give sufficient permissions to share $uri",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun showGenericError() {
+        runOnUiThread {
+            Toast.makeText(
+                this,
+                "An unexpected error occurred while accessing the shared file.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
     private fun isWifiApEnabled(): Boolean {
         return try {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
