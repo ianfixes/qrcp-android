@@ -1,4 +1,4 @@
-package com.example.qrcp.ui.theme
+package com.ianfixes.qrcp.ui.theme
 
 import android.app.Activity
 import android.os.Build

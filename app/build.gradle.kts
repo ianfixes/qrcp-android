@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.qrcp"
+    namespace = "com.ianfixes.qrcp"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.qrcp"
+        applicationId = "com.ianfixes.qrcp"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

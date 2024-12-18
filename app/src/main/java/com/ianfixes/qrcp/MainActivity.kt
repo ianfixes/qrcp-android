@@ -1,4 +1,4 @@
-package com.example.qrcp
+package com.ianfixes.qrcp
 
 // Jetpack Compose
 import android.content.Context
@@ -41,7 +41,7 @@ import android.widget.Toast
 
 
 import androidx.compose.ui.Modifier
-import com.example.qrcp.ui.theme.QRCPTheme
+import com.ianfixes.qrcp.ui.theme.QRCPTheme
 import java.net.Inet4Address
 import java.net.NetworkInterface
 

@@ -1,4 +1,4 @@
-package com.example.qrcp
+package com.ianfixes.qrcp
 
 import android.content.Context
 import android.net.Uri

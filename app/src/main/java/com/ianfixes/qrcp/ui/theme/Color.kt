@@ -1,4 +1,4 @@
-package com.example.qrcp.ui.theme
+package com.ianfixes.qrcp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
