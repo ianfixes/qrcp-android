@@ -1,11 +1,8 @@
 package com.example.qrcp
 
 // Jetpack Compose
-import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -35,10 +32,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-// import androidx.compose.foundation.lazy.LazyColumn
-// import androidx.compose.foundation.lazy.items
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 
@@ -47,7 +41,6 @@ import android.widget.Toast
 
 
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.qrcp.ui.theme.QRCPTheme
 import java.net.Inet4Address
 import java.net.NetworkInterface
