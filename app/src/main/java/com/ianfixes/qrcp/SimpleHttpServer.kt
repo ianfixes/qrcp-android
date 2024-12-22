@@ -2,7 +2,10 @@ package com.ianfixes.qrcp
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Log
 import fi.iki.elonen.NanoHTTPD
+import java.io.File
 import java.io.InputStream
 
 class SimpleHttpServer(
@@ -23,9 +26,35 @@ class SimpleHttpServer(
 
             val fileStream: InputStream? = context.contentResolver.openInputStream(fileUri)
             val fileSize = fileStream?.available()?.toLong() ?: 0
+            val filename = getFileNameFromUri(context, fileUri)
 
             downloadCount++
-            return newFixedLengthResponse(Response.Status.OK, getMimeType(fileUri), fileStream, fileSize)
+            // we have already checked that the URI can be opened
+            val response = newFixedLengthResponse(Response.Status.OK, getMimeType(fileUri), fileStream!!, fileSize)
+
+            // Add headers to set the filename
+            response.addHeader("Content-Disposition", "filename=\"${filename}\"")
+
+            return response
+        }
+    }
+
+    private fun getFileNameFromUri(context: Context, uri: Uri): String? {
+        return try {
+            if (uri.scheme == "content") {
+                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        return it.getString(it.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                    }
+                }
+            } else if (uri.scheme == "file") {
+                return File(uri.path!!).name
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error retrieving file name for URI: $uri", e)
+            null
         }
     }
 
