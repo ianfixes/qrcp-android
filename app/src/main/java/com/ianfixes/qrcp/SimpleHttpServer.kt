@@ -7,6 +7,7 @@ import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
 import java.io.InputStream
+import java.io.OutputStream
 
 class SimpleHttpServer(
     private val context: Context,
@@ -14,6 +15,25 @@ class SimpleHttpServer(
     private var maxDownloads: Int = 1, // Default to 1 download
     private val onServerStopped: () -> Unit // Callback for when the server stops
 ) : NanoHTTPD(0) { // Use 0 to let the system assign a random port
+
+
+    private class CustomResponse(
+        status: Response.Status,
+        mimeType: String,
+        data: InputStream?,
+        contentLength: Long
+    ) : Response(status, mimeType, data, contentLength) {
+        private var onCompleteCallback: (() -> Unit)? = null
+
+        fun setOnCompleteCallback(callback: () -> Unit) {
+            this.onCompleteCallback = callback
+        }
+
+        override fun send(outputStream: OutputStream) {
+            super.send(outputStream)
+            onCompleteCallback?.invoke()
+        }
+    }
 
     private var downloadCount = 0
 
@@ -30,11 +50,15 @@ class SimpleHttpServer(
 
             downloadCount++
             // we have already checked that the URI can be opened
-            val response = newFixedLengthResponse(Response.Status.OK, getMimeType(fileUri), fileStream!!, fileSize)
+            val response = CustomResponse(Response.Status.OK, getMimeType(fileUri), fileStream!!, fileSize)
 
             // Add headers to set the filename
             response.addHeader("Content-Disposition", "filename=\"${filename}\"")
 
+            // Schedule server to stop after sending the response
+            response.setOnCompleteCallback {
+                stopServer()
+            }
             return response
         }
     }
