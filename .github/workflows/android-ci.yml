@@ -10,13 +10,17 @@ on:
 env:
   APP_TITLE: "QRCP"
   APK_DEBUG: "app/build/outputs/apk/debug/app-debug.apk"
-  APK_RELEASE: "app/build/outputs/apk/release/app-release-unsigned.apk"
+  APK_RELEASE: "app/build/outputs/apk/release/app-release.apk"
+  RELEASE_KEY: app/release-key.jks
   ARTIFACT_ROOT: "app/build/outputs"
+  ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+  ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
 jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@v3
       - name: Set up JDK 17
@@ -26,12 +30,23 @@ jobs:
           distribution: 'temurin'
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.RELEASE_KEY }}
+      - name: Test secrets
+        run: |
+          test -f ${{ env.RELEASE_KEY }} || { echo "${{ env.RELEASE_KEY }} not found"; ls -l ; exit 1 ;}
+          test -n "$ANDROID_KEY_ALIAS" || { echo "ANDROID_KEY_ALIAS apparently not set"; exit 1 ;}
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "ANDROID_KEYSTORE_PASSWORD apparently not set"; exit 1 ;}
+      - name: Initialize Gradle
+        run: ./gradlew help
       - name: Run Linter
         run: ./gradlew lint
 
   build-debug:
     name: Build Debug APK
     runs-on: ubuntu-latest
+    environment: release
     if: github.ref_type != 'tag'
     steps:
       - uses: actions/checkout@v3
@@ -40,6 +55,8 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Initialize Gradle
+        run: ./gradlew help
       - name: Build Debug APK
         run: ./gradlew assembleDebug
       - name: Rename APK
@@ -49,14 +66,20 @@ jobs:
         with:
           name: ${{ env.APP_TITLE }}-debug.apk
           path: ${{ env.ARTIFACT_ROOT }}/${{ env.APP_TITLE }}-debug.apk
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.RELEASE_KEY }}
       - name: Build Release APK to make sure it works
         run: ./gradlew assembleRelease
       - name: Ensure release build is where we expect
         run: ls -l ${{ env.APK_RELEASE }} || { find ${{ env.ARTIFACT_ROOT }} ; exit 1 ; }
+      - name: Verify APK signature
+        run: jarsigner -verify -verbose -certs ${{ env.APK_RELEASE }}
 
   build-release:
     name: Build Release APK
     runs-on: ubuntu-latest
+    environment: release
     if: github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v3
@@ -65,8 +88,13 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.RELEASE_KEY }}
       - name: Build Release APK
         run: ./gradlew assembleRelease
+      - name: Verify APK signature
+        run: jarsigner -verify -verbose -certs ${{ env.APK_RELEASE }}
       - name: Rename APK
         run: mv ${{ env.APK_RELEASE }} ${{ env.ARTIFACT_ROOT }}/${{ env.APP_TITLE }}-release.apk
       - name: Upload Release APK to GitHub Releases
@@ -75,4 +103,3 @@ jobs:
           files: ${{ env.ARTIFACT_ROOT }}/${{ env.APP_TITLE }}-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
